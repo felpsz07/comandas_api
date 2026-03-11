@@ -1,3 +1,4 @@
+# Felipe Bueno de Oliveira
 from dotenv import load_dotenv, find_dotenv
 import os
 

@@ -1,3 +1,4 @@
+# Felipe Bueno de Oliveira
 from fastapi import FastAPI
 from src.settings import HOST, PORT, RELOAD
 import uvicorn
