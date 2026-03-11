@@ -1,0 +1,28 @@
+### Verbo GET - listar todos os produtos
+GET http://localhost:8000/produto/ HTTP/1.1
+
+### Verbo GET - listar um produto
+GET http://localhost:8000/produto/10 HTTP/1.1
+
+### Verbo POST - Adicionar produto
+POST http://127.0.0.1:8000/produto/ HTTP/1.1
+Content-Type: application/json
+
+{
+    "nome": "Coca-cola",
+    "descricao": "Refrigerante de cola",
+    "valor_unitario": 5.99
+}
+
+### Verbo PUT - Atualizar produto
+PUT http://127.0.0.1:8000/produto/2 HTTP/1.1
+Content-Type: application/json
+
+{
+    "nome": "Coca-cola Zero",
+    "descricao": "Refrigerante de cola sem açúcar",
+    "valor_unitario": 6.99
+}
+
+### Verbo DELETE - Excluir produto
+DELETE http://127.0.0.1:8000/produto/3 HTTP/1.1
