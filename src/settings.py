@@ -35,3 +35,9 @@ elif DB_SGDB == "mssql":
     STR_DATABASE =f"mssql+pymssql://{DB_USER}:{DB_PASS}@{DB_HOST}/{DB_NAME}?charset=utf8"
 else:     # SQLite
     STR_DATABASE = f"sqlite:///./comandas_db.db"
+
+SECRET_KEY = os.getenv("SECRET_KEY","plkojigytfdgHUJKOÇJIGTFHDGdhtfgyhujilkoçjhugtfhgd")
+ALGORITHM = os.getenv("ALGORITHM","HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES","15"))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS","7"))
+

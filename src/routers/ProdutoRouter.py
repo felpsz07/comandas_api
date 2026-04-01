@@ -1,4 +1,3 @@
-# Felipe Bueno de Oliveira
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
@@ -9,14 +8,40 @@ from src.domain.schemas.ProdutoSchema import (
     ProdutoResponse
 )
 
+from src.domain.schemas.AuthSchema import FuncionarioAuth
 from src.infra.orm.ProdutoModel import ProdutoDB
 from src.infra.database import get_db
+from src.infra.dependencies import get_current_active_user, require_group
 
 router = APIRouter()
 
 
-@router.get("/produto/", response_model=List[ProdutoResponse], tags=["Produto"], status_code=status.HTTP_200_OK)
-async def get_produtos(db: Session = Depends(get_db)):
+# Pública, caso você precise cumprir a parte "listar todos sem id e valor"
+@router.get("/produto/publico", tags=["Produto"], status_code=status.HTTP_200_OK)
+async def get_produtos_publico(db: Session = Depends(get_db)):
+    try:
+        produtos = db.query(ProdutoDB).all()
+        return [
+            {"nome": produto.nome, "descricao": produto.descricao, "foto": produto.foto}
+            for produto in produtos
+        ]
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao buscar produtos públicos: {str(e)}"
+        )
+
+
+@router.get(
+    "/produto/",
+    response_model=List[ProdutoResponse],
+    tags=["Produto"],
+    status_code=status.HTTP_200_OK
+)
+async def get_produtos(
+    db: Session = Depends(get_db),
+    current_user: FuncionarioAuth = Depends(get_current_active_user)
+):
     try:
         produtos = db.query(ProdutoDB).all()
         return produtos
@@ -27,8 +52,17 @@ async def get_produtos(db: Session = Depends(get_db)):
         )
 
 
-@router.get("/produto/{id}", response_model=ProdutoResponse, tags=["Produto"], status_code=status.HTTP_200_OK)
-async def get_produto(id: int, db: Session = Depends(get_db)):
+@router.get(
+    "/produto/{id}",
+    response_model=ProdutoResponse,
+    tags=["Produto"],
+    status_code=status.HTTP_200_OK
+)
+async def get_produto(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: FuncionarioAuth = Depends(get_current_active_user)
+):
     try:
         produto = db.query(ProdutoDB).filter(ProdutoDB.id == id).first()
 
@@ -40,6 +74,8 @@ async def get_produto(id: int, db: Session = Depends(get_db)):
 
         return produto
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -47,10 +83,18 @@ async def get_produto(id: int, db: Session = Depends(get_db)):
         )
 
 
-@router.post("/produto/", response_model=ProdutoResponse, tags=["Produto"], status_code=status.HTTP_201_CREATED)
-async def post_produto(produto_data: ProdutoCreate, db: Session = Depends(get_db)):
+@router.post(
+    "/produto/",
+    response_model=ProdutoResponse,
+    tags=["Produto"],
+    status_code=status.HTTP_201_CREATED
+)
+async def post_produto(
+    produto_data: ProdutoCreate,
+    db: Session = Depends(get_db),
+    current_user: FuncionarioAuth = Depends(require_group([1]))
+):
     try:
-
         novo_produto = ProdutoDB(
             id=None,
             nome=produto_data.nome,
@@ -73,10 +117,19 @@ async def post_produto(produto_data: ProdutoCreate, db: Session = Depends(get_db
         )
 
 
-@router.put("/produto/{id}", response_model=ProdutoResponse, tags=["Produto"], status_code=status.HTTP_200_OK)
-async def put_produto(id: int, produto_data: ProdutoUpdate, db: Session = Depends(get_db)):
+@router.put(
+    "/produto/{id}",
+    response_model=ProdutoResponse,
+    tags=["Produto"],
+    status_code=status.HTTP_200_OK
+)
+async def put_produto(
+    id: int,
+    produto_data: ProdutoUpdate,
+    db: Session = Depends(get_db),
+    current_user: FuncionarioAuth = Depends(require_group([1]))
+):
     try:
-
         produto = db.query(ProdutoDB).filter(ProdutoDB.id == id).first()
 
         if not produto:
@@ -95,6 +148,8 @@ async def put_produto(id: int, produto_data: ProdutoUpdate, db: Session = Depend
 
         return produto
 
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -103,10 +158,17 @@ async def put_produto(id: int, produto_data: ProdutoUpdate, db: Session = Depend
         )
 
 
-@router.delete("/produto/{id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Produto"])
-async def delete_produto(id: int, db: Session = Depends(get_db)):
+@router.delete(
+    "/produto/{id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["Produto"]
+)
+async def delete_produto(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: FuncionarioAuth = Depends(require_group([1]))
+):
     try:
-
         produto = db.query(ProdutoDB).filter(ProdutoDB.id == id).first()
 
         if not produto:
@@ -120,6 +182,8 @@ async def delete_produto(id: int, db: Session = Depends(get_db)):
 
         return None
 
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(
