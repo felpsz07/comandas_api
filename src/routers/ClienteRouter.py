@@ -1,25 +1,31 @@
-# Felipe Bueno de Oliveira
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 
-# Domain Schemas
 from src.domain.schemas.ClienteSchema import (
     ClienteCreate,
     ClienteUpdate,
     ClienteResponse
 )
 
-# Infra
+from src.domain.schemas.AuthSchema import FuncionarioAuth
 from src.infra.orm.ClienteModel import ClienteDB
 from src.infra.database import get_db
+from src.infra.dependencies import get_current_active_user, require_group
 
 router = APIRouter()
 
 
-@router.get("/cliente/", response_model=List[ClienteResponse], tags=["Cliente"], status_code=status.HTTP_200_OK)
-async def get_clientes(db: Session = Depends(get_db)):
-    """Retira todos os clientes"""
+@router.get(
+    "/cliente/",
+    response_model=List[ClienteResponse],
+    tags=["Cliente"],
+    status_code=status.HTTP_200_OK
+)
+async def get_clientes(
+    db: Session = Depends(get_db),
+    current_user: FuncionarioAuth = Depends(get_current_active_user)
+):
     try:
         clientes = db.query(ClienteDB).all()
         return clientes
@@ -30,9 +36,17 @@ async def get_clientes(db: Session = Depends(get_db)):
         )
 
 
-@router.get("/cliente/{id}", response_model=ClienteResponse, tags=["Cliente"], status_code=status.HTTP_200_OK)
-async def get_cliente(id: int, db: Session = Depends(get_db)):
-    """Retira um cliente específico pelo ID"""
+@router.get(
+    "/cliente/{id}",
+    response_model=ClienteResponse,
+    tags=["Cliente"],
+    status_code=status.HTTP_200_OK
+)
+async def get_cliente(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: FuncionarioAuth = Depends(get_current_active_user)
+):
     try:
         cliente = db.query(ClienteDB).filter(ClienteDB.id == id).first()
 
@@ -44,6 +58,8 @@ async def get_cliente(id: int, db: Session = Depends(get_db)):
 
         return cliente
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -51,11 +67,18 @@ async def get_cliente(id: int, db: Session = Depends(get_db)):
         )
 
 
-@router.post("/cliente/", response_model=ClienteResponse, status_code=status.HTTP_201_CREATED, tags=["Cliente"])
-async def post_cliente(cliente_data: ClienteCreate, db: Session = Depends(get_db)):
-    """Cria um novo cliente"""
+@router.post(
+    "/cliente/",
+    response_model=ClienteResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Cliente"]
+)
+async def post_cliente(
+    cliente_data: ClienteCreate,
+    db: Session = Depends(get_db),
+    current_user: FuncionarioAuth = Depends(require_group([1, 3]))
+):
     try:
-
         existing_cliente = db.query(ClienteDB).filter(ClienteDB.cpf == cliente_data.cpf).first()
 
         if existing_cliente:
@@ -79,7 +102,6 @@ async def post_cliente(cliente_data: ClienteCreate, db: Session = Depends(get_db
 
     except HTTPException:
         raise
-
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -88,11 +110,19 @@ async def post_cliente(cliente_data: ClienteCreate, db: Session = Depends(get_db
         )
 
 
-@router.put("/cliente/{id}", response_model=ClienteResponse, tags=["Cliente"], status_code=status.HTTP_200_OK)
-async def put_cliente(id: int, cliente_data: ClienteUpdate, db: Session = Depends(get_db)):
-    """Atualiza um cliente existente"""
+@router.put(
+    "/cliente/{id}",
+    response_model=ClienteResponse,
+    tags=["Cliente"],
+    status_code=status.HTTP_200_OK
+)
+async def put_cliente(
+    id: int,
+    cliente_data: ClienteUpdate,
+    db: Session = Depends(get_db),
+    current_user: FuncionarioAuth = Depends(require_group([1, 3]))
+):
     try:
-
         cliente = db.query(ClienteDB).filter(ClienteDB.id == id).first()
 
         if not cliente:
@@ -122,7 +152,6 @@ async def put_cliente(id: int, cliente_data: ClienteUpdate, db: Session = Depend
 
     except HTTPException:
         raise
-
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -131,11 +160,17 @@ async def put_cliente(id: int, cliente_data: ClienteUpdate, db: Session = Depend
         )
 
 
-@router.delete("/cliente/{id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Cliente"])
-async def delete_cliente(id: int, db: Session = Depends(get_db)):
-    """Remove um cliente"""
+@router.delete(
+    "/cliente/{id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["Cliente"]
+)
+async def delete_cliente(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: FuncionarioAuth = Depends(require_group([1]))
+):
     try:
-
         cliente = db.query(ClienteDB).filter(ClienteDB.id == id).first()
 
         if not cliente:
@@ -151,7 +186,6 @@ async def delete_cliente(id: int, db: Session = Depends(get_db)):
 
     except HTTPException:
         raise
-
     except Exception as e:
         db.rollback()
         raise HTTPException(
