@@ -1,31 +1,29 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+# Felipe Bueno de Oliveirea
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
+from infra.rate_limit import limiter, get_rate_limit
+from slowapi.errors import RateLimitExceeded
 from typing import List
+from services.AuditoriaService import AuditoriaService
 
-from src.domain.schemas.FuncionarioSchema import (
+from domain.schemas.FuncionarioSchema import (
     FuncionarioCreate,
     FuncionarioUpdate,
     FuncionarioResponse
 )
-from src.domain.schemas.AuthSchema import FuncionarioAuth
+from domain.schemas.AuthSchema import FuncionarioAuth
 
-from src.infra.orm.FuncionarioModel import FuncionarioDB
-from src.infra.database import get_db
-from src.infra.security import get_password_hash
-from src.infra.dependencies import get_current_active_user, require_group
+from infra.orm.FuncionarioModel import FuncionarioDB
+from infra.database import get_db
+from infra.security import get_password_hash
+from infra.dependencies import get_current_active_user, require_group
 
 router = APIRouter()
 
 
-@router.get(
-    "/funcionario/",
-    response_model=List[FuncionarioResponse],
-    tags=["Funcionario"],
-    status_code=status.HTTP_200_OK
-)
-async def get_funcionarios(
-    db: Session = Depends(get_db),
-    current_user: FuncionarioAuth = Depends(require_group([1]))
+@router.get( "/funcionario/", response_model=List[FuncionarioResponse], tags=["Funcionario"], status_code=status.HTTP_200_OK)
+@limiter.limit(get_rate_limit("critical"))
+async def get_funcionarios(request: Request, db: Session = Depends(get_db),current_user: FuncionarioAuth = Depends(require_group([1]))
 ):
     try:
         funcionarios = db.query(FuncionarioDB).all()
@@ -37,13 +35,10 @@ async def get_funcionarios(
         )
 
 
-@router.get(
-    "/funcionario/{id}",
-    response_model=FuncionarioResponse,
-    tags=["Funcionario"],
-    status_code=status.HTTP_200_OK
-)
+@router.get( "/funcionario/{id}", response_model=FuncionarioResponse, tags=["Funcionario"], status_code=status.HTTP_200_OK)
+@limiter.limit(get_rate_limit("Critical"))
 async def get_funcionario(
+    request: Request,
     id: int,
     db: Session = Depends(get_db),
     current_user: FuncionarioAuth = Depends(get_current_active_user)
@@ -66,13 +61,10 @@ async def get_funcionario(
         )
 
 
-@router.post(
-    "/funcionario/",
-    response_model=FuncionarioResponse,
-    status_code=status.HTTP_201_CREATED,
-    tags=["Funcionário"]
-)
+@router.post( "/funcionario/", response_model=FuncionarioResponse, status_code=status.HTTP_201_CREATED, tags=["Funcionário"])
+@limiter.limit(get_rate_limit("critical"))
 async def post_funcionario(
+    request: Request,
     funcionario_data: FuncionarioCreate,
     db: Session = Depends(get_db),
     current_user: FuncionarioAuth = Depends(require_group([1]))
@@ -101,6 +93,17 @@ async def post_funcionario(
         db.add(novo_funcionario)
         db.commit()
         db.refresh(novo_funcionario)
+        # Depois de tudo executado e antes do return, registra a ação na auditoria
+        AuditoriaService.registrar_acao(
+            db=db,
+            funcionario_id=current_user.id,
+            acao="CREATE",
+            recurso="FUNCIONARIO",
+            recurso_id=novo_funcionario.id,
+            dados_antigos=None,
+            dados_novos=novo_funcionario,
+            request=request
+        )
 
         return novo_funcionario
 
@@ -114,13 +117,10 @@ async def post_funcionario(
         )
 
 
-@router.put(
-    "/funcionario/{id}",
-    response_model=FuncionarioResponse,
-    tags=["Funcionário"],
-    status_code=status.HTTP_200_OK
-)
+@router.put( "/funcionario/{id}", response_model=FuncionarioResponse, tags=["Funcionário"], status_code=status.HTTP_200_OK)
+@limiter.limit(get_rate_limit("critical"))
 async def put_funcionario(
+    request: Request,
     id: int,
     funcionario_data: FuncionarioUpdate,
     db: Session = Depends(get_db),
@@ -146,6 +146,14 @@ async def put_funcionario(
 
         if funcionario_data.senha:
             funcionario_data.senha = get_password_hash(funcionario_data.senha)
+        
+        if funcionario_data.grupo and funcionario_data.grupo not in [1, 2, 3]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Grupo deve ser 1 (Admin), 2 (Gerente) ou 3 (Atendente)"
+            )
+        
+        dados_anntigos_obj = funcionario.__dict__.copy()
 
         update_data = funcionario_data.model_dump(exclude_unset=True)
 
@@ -154,6 +162,17 @@ async def put_funcionario(
 
         db.commit()
         db.refresh(funcionario)
+
+        AuditoriaService.registrar_acao(
+            db=db,
+            funcionario_id=current_user.id,
+            acao="UPDATE",
+            recurso="FUNCIONARIO",
+            recurso_id=funcionario.id,
+            dados_antigos=dados_anntigos_obj,
+            dados_novos=funcionario,
+            request=request
+        )
 
         return funcionario
 
@@ -167,16 +186,9 @@ async def put_funcionario(
         )
 
 
-@router.delete(
-    "/funcionario/{id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    tags=["Funcionário"],
-    summary="Remover funcionário"
-)
-async def delete_funcionario(
-    id: int,
-    db: Session = Depends(get_db),
-    current_user: FuncionarioAuth = Depends(require_group([1]))
+@router.delete( "/funcionario/{id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Funcionário"], summary="Remover funcionário")
+@limiter.limit(get_rate_limit("Critical"))
+async def delete_funcionario(request: Request, id: int, db: Session = Depends(get_db), current_user: FuncionarioAuth = Depends(require_group([1]))
 ):
     try:
         funcionario = db.query(FuncionarioDB).filter(FuncionarioDB.id == id).first()
@@ -188,6 +200,17 @@ async def delete_funcionario(
 
         db.delete(funcionario)
         db.commit()
+
+        AuditoriaService.registrar_acao(
+            db=db,
+            funcionario_id=current_user.id,
+            acao="DELETE",
+            recurso="FUNCIONARIO",
+            recurso_id=id,
+            dados_antigos=funcionario,
+            dados_novos=None,
+            request=request
+        )
 
         return None
 
