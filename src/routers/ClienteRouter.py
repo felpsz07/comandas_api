@@ -1,17 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+# Felipe Bueno de Oliveirea
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import List
+from infra.rate_limit import limiter, get_rate_limit
+from slowapi.errors import RateLimitExceeded
+from services.AuditoriaService import AuditoriaService
 
-from src.domain.schemas.ClienteSchema import (
+from domain.schemas.ClienteSchema import (
     ClienteCreate,
     ClienteUpdate,
     ClienteResponse
 )
 
-from src.domain.schemas.AuthSchema import FuncionarioAuth
-from src.infra.orm.ClienteModel import ClienteDB
-from src.infra.database import get_db
-from src.infra.dependencies import get_current_active_user, require_group
+from domain.schemas.AuthSchema import FuncionarioAuth
+from infra.orm.ClienteModel import ClienteDB
+from infra.database import get_db
+from infra.dependencies import get_current_active_user, require_group
 
 router = APIRouter()
 
@@ -22,7 +26,8 @@ router = APIRouter()
     tags=["Cliente"],
     status_code=status.HTTP_200_OK
 )
-async def get_clientes(
+@limiter.limit(get_rate_limit("Critical"))
+async def get_clientes(request: Request,
     db: Session = Depends(get_db),
     current_user: FuncionarioAuth = Depends(get_current_active_user)
 ):
@@ -42,7 +47,8 @@ async def get_clientes(
     tags=["Cliente"],
     status_code=status.HTTP_200_OK
 )
-async def get_cliente(
+@limiter.limit(get_rate_limit("Critical"))
+async def get_cliente(request: Request,
     id: int,
     db: Session = Depends(get_db),
     current_user: FuncionarioAuth = Depends(get_current_active_user)
@@ -73,7 +79,8 @@ async def get_cliente(
     status_code=status.HTTP_201_CREATED,
     tags=["Cliente"]
 )
-async def post_cliente(
+@limiter.limit(get_rate_limit("Critical"))
+async def post_cliente(request: Request,
     cliente_data: ClienteCreate,
     db: Session = Depends(get_db),
     current_user: FuncionarioAuth = Depends(require_group([1, 3]))
@@ -98,6 +105,16 @@ async def post_cliente(
         db.commit()
         db.refresh(novo_cliente)
 
+        AuditoriaService.registrar_acao(
+            db=db,
+            funcionario_id=current_user.id,
+            acao="CREATE",
+            recurso="cliente",
+            recurso_id=novo_cliente.id,
+            dados_antigos=None,
+            dados_novos=novo_cliente,
+            request=request
+        )
         return novo_cliente
 
     except HTTPException:
@@ -110,13 +127,9 @@ async def post_cliente(
         )
 
 
-@router.put(
-    "/cliente/{id}",
-    response_model=ClienteResponse,
-    tags=["Cliente"],
-    status_code=status.HTTP_200_OK
-)
-async def put_cliente(
+@router.put( "/cliente/{id}", response_model=ClienteResponse, tags=["Cliente"], status_code=status.HTTP_200_OK)
+@limiter.limit(get_rate_limit("Critical"))
+async def put_cliente(request: Request,
     id: int,
     cliente_data: ClienteUpdate,
     db: Session = Depends(get_db),
@@ -139,6 +152,8 @@ async def put_cliente(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Já existe um cliente com este CPF"
                 )
+        
+        dados_antigos_obj = cliente.__dict__.copy()  # Cria uma cópia dos dados antigos para auditoria 
 
         update_data = cliente_data.model_dump(exclude_unset=True)
 
@@ -147,6 +162,18 @@ async def put_cliente(
 
         db.commit()
         db.refresh(cliente)
+
+        AuditoriaService.registrar_acao(
+            db=db,
+            funcionario_id=current_user.id,
+            acao="UPDATE",
+            recurso="cliente",
+            recurso_id=cliente.id,
+            dados_antigos=dados_antigos_obj,
+            dados_novos=cliente,
+            request=request
+        )
+
 
         return cliente
 
@@ -165,7 +192,8 @@ async def put_cliente(
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["Cliente"]
 )
-async def delete_cliente(
+@limiter.limit(get_rate_limit("Critical"))
+async def delete_cliente(request: Request,
     id: int,
     db: Session = Depends(get_db),
     current_user: FuncionarioAuth = Depends(require_group([1]))
@@ -178,9 +206,21 @@ async def delete_cliente(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Cliente não encontrado"
             )
+        
 
         db.delete(cliente)
         db.commit()
+
+        AuditoriaService.registrar_acao(
+            db=db,
+            funcionario_id=current_user.id,
+            acao="DELETE",
+            recurso="CLIENTE",
+            recurso_id=id,  
+            dados_antigos=cliente,
+            dados_novos=None,
+            request=request
+        )
 
         return None
 
