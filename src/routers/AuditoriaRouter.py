@@ -1,7 +1,8 @@
 # Felipe Bueno de Oliveirea
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, select, func
 from typing import List, Optional
 from datetime import datetime
 
@@ -33,7 +34,7 @@ async def listar_auditoria(
     """ 
     try:
         # Construir query base com joins manuais
-        query = db.query(AuditoriaDB, FuncionarioDB).join(FuncionarioDB, FuncionarioDB.id == AuditoriaDB.funcionario_id)
+        query = select(AuditoriaDB, FuncionarioDB).join(FuncionarioDB, FuncionarioDB.id == AuditoriaDB.funcionario_id)
 
         # Aplicar filtros
         if funcionario_id:

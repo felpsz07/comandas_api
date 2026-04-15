@@ -1,7 +1,7 @@
 # Felipe Bueno de Oliveirea
 from fastapi import APIRouter, HTTPException, status, Request, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, select, func
 from datetime import datetime, timezone
 import psutil
 from infra.database import get_db

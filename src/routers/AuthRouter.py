@@ -1,6 +1,7 @@
 # Felipe Bueno de Oliveirea
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import select, func
 from datetime import timedelta
 from slowapi.errors import RateLimitExceeded
 
