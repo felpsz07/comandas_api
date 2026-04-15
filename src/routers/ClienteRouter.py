@@ -1,6 +1,7 @@
 # Felipe Bueno de Oliveirea
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import select, func
 from typing import List
 from infra.rate_limit import limiter, get_rate_limit
 from slowapi.errors import RateLimitExceeded
@@ -32,7 +33,7 @@ async def get_clientes(request: Request,
     current_user: FuncionarioAuth = Depends(get_current_active_user)
 ):
     try:
-        clientes = db.query(ClienteDB).all()
+        clientes = await db.execute(select(ClienteDB).all())
         return clientes
     except Exception as e:
         raise HTTPException(
@@ -54,7 +55,7 @@ async def get_cliente(request: Request,
     current_user: FuncionarioAuth = Depends(get_current_active_user)
 ):
     try:
-        cliente = db.query(ClienteDB).filter(ClienteDB.id == id).first()
+        cliente = await db.execute(select(ClienteDB).filter(ClienteDB.id == id).first())
 
         if not cliente:
             raise HTTPException(
@@ -136,7 +137,7 @@ async def put_cliente(request: Request,
     current_user: FuncionarioAuth = Depends(require_group([1, 3]))
 ):
     try:
-        cliente = db.query(ClienteDB).filter(ClienteDB.id == id).first()
+        cliente = await db.execute(select(ClienteDB).filter(ClienteDB.id == id).first())
 
         if not cliente:
             raise HTTPException(
@@ -199,7 +200,7 @@ async def delete_cliente(request: Request,
     current_user: FuncionarioAuth = Depends(require_group([1]))
 ):
     try:
-        cliente = db.query(ClienteDB).filter(ClienteDB.id == id).first()
+        cliente = await db.execute(select(ClienteDB).filter(ClienteDB.id == id).first())
 
         if not cliente:
             raise HTTPException(
