@@ -39,7 +39,7 @@ elif DB_SGDB == 'postgresql': # PostgreSQL
     import psycopg2
     STR_DATABASE = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}/{DB_NAME}"
 else: # SQLite
-    STR_DATABASE = f"sqlite:///apiDatabase.db?foreign_keys=1"
+    STR_DATABASE = f"sqlite:///comandas_db.db?foreign_keys=1"
 
 # Configurações de database assíncrono
 # Converte string de conexão para async se necessário

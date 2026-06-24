@@ -1,5 +1,3 @@
-from unittest import result
-
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -79,7 +77,7 @@ async def get_comandas(
     limit: int = Query(100, ge=1, le=1000, description="Número máximo de registros"), # ge = maior ou igual, le = menor ou igual
     id: Optional[int] = Query(None, description="Filtrar por ID"),
     comanda: Optional[int] = Query(None, description="Filtrar por número da comanda"),
-    status: Optional[int] = Query(None, description="Filtrar por status: 0=aberta, 1=fechada, 2=cancelada"),
+    status_filtro: Optional[int] = Query(None, alias="status", description="Filtrar por status: 0=aberta, 1=fechada, 2=cancelada"),
     funcionario_id: Optional[int] = Query(None, description="Filtrar por funcionário"),
     cliente_id: Optional[int] = Query(None, description="Filtrar por cliente"),
     data_inicio: Optional[datetime] = Query(None, description="Filtrar por data inicial"),
@@ -99,24 +97,18 @@ async def get_comandas(
             conditions.append(ComandaDB.id == id)
         if comanda is not None:
             conditions.append(ComandaDB.comanda == comanda)
-        if status is not None:
-            conditions.append(ComandaDB.status == status)
+        if status_filtro is not None:
+            conditions.append(ComandaDB.status == status_filtro)
         if funcionario_id is not None:
             conditions.append(ComandaDB.funcionario_id == funcionario_id)
         if cliente_id is not None:
             conditions.append(ComandaDB.cliente_id == cliente_id)
         if data_inicio is not None:
-            try:
-                data_inicio = datetime.strptime(data_inicio, "%Y-%m-%d")
-                conditions.append(ComandaDB.data_hora >= data_inicio)
-            except ValueError:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Data início inválida. Use formato YYYY-MM-DD")
+            # data_inicio já chega como datetime (FastAPI converte automaticamente
+            # a partir do tipo Optional[datetime]), não precisa de strptime aqui
+            conditions.append(ComandaDB.data_hora >= data_inicio)
         if data_fim is not None:
-            try:
-                data_fim = datetime.strptime(data_fim, "%Y-%m-%d")
-                conditions.append(ComandaDB.data_hora <= data_fim)
-            except ValueError:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Data fim inválida. Use formato YYYY-MM-DD")
+            conditions.append(ComandaDB.data_hora <= data_fim)
         # Aplicar condições à query
         if conditions:
             query = query.where(*conditions)
@@ -127,13 +119,13 @@ async def get_comandas(
 
         # Construir lista de responses manualmente
         comandas_response = []
-        for comanda, funcionario, cliente in results:
+        for comanda_row, funcionario, cliente in results:
             comanda_response = ComandaResponse(
-                id=comanda.id, comanda=comanda.comanda, data_hora=comanda.data_hora, status=comanda.status, cliente_id=comanda.cliente_id, funcionario_id=comanda.funcionario_id,
+                id=comanda_row.id, comanda=comanda_row.comanda, data_hora=comanda_row.data_hora, status=comanda_row.status, cliente_id=comanda_row.cliente_id, funcionario_id=comanda_row.funcionario_id,
                 funcionario=FuncionarioResponse(id=funcionario.id, nome=funcionario.nome, matricula=funcionario.matricula, cpf=funcionario.cpf, telefone=funcionario.telefone, grupo=funcionario.grupo) if funcionario else None,
                 cliente=ClienteResponse(id=cliente.id, nome=cliente.nome, cpf=cliente.cpf, telefone=cliente.telefone) if cliente else None
             )
-        comandas_response.append(comanda_response)
+            comandas_response.append(comanda_response)
         return comandas_response
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Erro ao buscar comandas: {str(e)}")
@@ -637,7 +629,6 @@ async def update_comanda_produto(
 
         # Armazena uma cópia dos dados atuais para auditoria
         dados_antigos_obj = comanda_produto.__dict__.copy()
-        print("dados_antigos_obj:", dados_antigos_obj)
 
         # Atualizar campos se fornecidos
         if produto_data.quantidade is not None:
