@@ -14,6 +14,7 @@ from domain.schemas.FuncionarioSchema import (
 from domain.schemas.AuthSchema import FuncionarioAuth
 
 from infra.orm.FuncionarioModel import FuncionarioDB
+from infra.orm.AuditoriaModel import AuditoriaDB
 from infra.database import get_db
 from infra.security import get_password_hash
 from infra.dependencies import get_current_active_user, require_group
@@ -93,7 +94,7 @@ async def post_funcionario(
         db.add(novo_funcionario)
         db.commit()
         db.refresh(novo_funcionario)
-        # Depois de tudo executado e antes do return, registra a ação na auditoria
+
         AuditoriaService.registrar_acao(
             db=db,
             funcionario_id=current_user.id,
@@ -146,13 +147,13 @@ async def put_funcionario(
 
         if funcionario_data.senha:
             funcionario_data.senha = get_password_hash(funcionario_data.senha)
-        
+
         if funcionario_data.grupo and funcionario_data.grupo not in [1, 2, 3]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Grupo deve ser 1 (Admin), 2 (Gerente) ou 3 (Atendente)"
             )
-        
+
         dados_anntigos_obj = funcionario.__dict__.copy()
 
         update_data = funcionario_data.model_dump(exclude_unset=True)
@@ -198,19 +199,9 @@ async def delete_funcionario(request: Request, id: int, db: Session = Depends(ge
                 detail="Funcionário não encontrado"
             )
 
+        db.query(AuditoriaDB).filter(AuditoriaDB.funcionario_id == id).delete()
         db.delete(funcionario)
         db.commit()
-
-        AuditoriaService.registrar_acao(
-            db=db,
-            funcionario_id=current_user.id,
-            acao="DELETE",
-            recurso="FUNCIONARIO",
-            recurso_id=id,
-            dados_antigos=funcionario,
-            dados_novos=None,
-            request=request
-        )
 
         return None
 

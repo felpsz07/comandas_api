@@ -1,10 +1,9 @@
 # Felipe Bueno de Oliveirea
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func
+from sqlalchemy import select
 from typing import List
 from infra.rate_limit import limiter, get_rate_limit
-from slowapi.errors import RateLimitExceeded
 from services.AuditoriaService import AuditoriaService
 
 from domain.schemas.ClienteSchema import (
@@ -33,7 +32,8 @@ async def get_clientes(request: Request,
     current_user: FuncionarioAuth = Depends(get_current_active_user)
 ):
     try:
-        clientes = await db.execute(select(ClienteDB).all())
+        result = db.execute(select(ClienteDB))
+        clientes = result.scalars().all()
         return clientes
     except Exception as e:
         raise HTTPException(
@@ -55,7 +55,8 @@ async def get_cliente(request: Request,
     current_user: FuncionarioAuth = Depends(get_current_active_user)
 ):
     try:
-        cliente = await db.execute(select(ClienteDB).filter(ClienteDB.id == id).first())
+        result = db.execute(select(ClienteDB).where(ClienteDB.id == id))
+        cliente = result.scalars().first()
 
         if not cliente:
             raise HTTPException(
@@ -87,7 +88,8 @@ async def post_cliente(request: Request,
     current_user: FuncionarioAuth = Depends(require_group([1, 3]))
 ):
     try:
-        existing_cliente = db.query(ClienteDB).filter(ClienteDB.cpf == cliente_data.cpf).first()
+        result = db.execute(select(ClienteDB).where(ClienteDB.cpf == cliente_data.cpf))
+        existing_cliente = result.scalars().first()
 
         if existing_cliente:
             raise HTTPException(
@@ -128,7 +130,7 @@ async def post_cliente(request: Request,
         )
 
 
-@router.put( "/cliente/{id}", response_model=ClienteResponse, tags=["Cliente"], status_code=status.HTTP_200_OK)
+@router.put("/cliente/{id}", response_model=ClienteResponse, tags=["Cliente"], status_code=status.HTTP_200_OK)
 @limiter.limit(get_rate_limit("Critical"))
 async def put_cliente(request: Request,
     id: int,
@@ -137,7 +139,8 @@ async def put_cliente(request: Request,
     current_user: FuncionarioAuth = Depends(require_group([1, 3]))
 ):
     try:
-        cliente = await db.execute(select(ClienteDB).filter(ClienteDB.id == id).first())
+        result = db.execute(select(ClienteDB).where(ClienteDB.id == id))
+        cliente = result.scalars().first()
 
         if not cliente:
             raise HTTPException(
@@ -146,16 +149,16 @@ async def put_cliente(request: Request,
             )
 
         if cliente_data.cpf and cliente_data.cpf != cliente.cpf:
-            existing_cliente = db.query(ClienteDB).filter(ClienteDB.cpf == cliente_data.cpf).first()
+            result_existing = db.execute(select(ClienteDB).where(ClienteDB.cpf == cliente_data.cpf))
+            existing_cliente = result_existing.scalars().first()
 
             if existing_cliente:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Já existe um cliente com este CPF"
                 )
-        
-        dados_antigos_obj = cliente.__dict__.copy()  # Cria uma cópia dos dados antigos para auditoria 
 
+        dados_antigos_obj = cliente.__dict__.copy()
         update_data = cliente_data.model_dump(exclude_unset=True)
 
         for field, value in update_data.items():
@@ -174,7 +177,6 @@ async def put_cliente(request: Request,
             dados_novos=cliente,
             request=request
         )
-
 
         return cliente
 
@@ -200,14 +202,14 @@ async def delete_cliente(request: Request,
     current_user: FuncionarioAuth = Depends(require_group([1]))
 ):
     try:
-        cliente = await db.execute(select(ClienteDB).filter(ClienteDB.id == id).first())
+        result = db.execute(select(ClienteDB).where(ClienteDB.id == id))
+        cliente = result.scalars().first()
 
         if not cliente:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Cliente não encontrado"
             )
-        
 
         db.delete(cliente)
         db.commit()
@@ -217,7 +219,7 @@ async def delete_cliente(request: Request,
             funcionario_id=current_user.id,
             acao="DELETE",
             recurso="CLIENTE",
-            recurso_id=id,  
+            recurso_id=id,
             dados_antigos=cliente,
             dados_novos=None,
             request=request
